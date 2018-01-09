@@ -12,6 +12,7 @@ import (
 
 	"sync"
 
+	"github.com/PuerkitoBio/goquery"
 	"golang.org/x/net/html"
 )
 
@@ -186,7 +187,13 @@ func (pc PageCrawler) Run(ctx context.Context, client *http.Client, pool WorkerP
 func CrawlBody(client *http.Client, target *url.URL, body io.Reader) ([]LinkReport, error) {
 	var kids []LinkReport
 
-	for link := range farm(body, target) {
+	//links, err := farmWithGoquery(body, target)
+	//if err != nil {
+	//	return nil, err
+	//}
+
+	links := farmWithHTML(body, target)
+	for link := range links {
 		if link.Host != target.Host {
 			continue
 		}
@@ -257,7 +264,48 @@ func exploreURL(client *http.Client, target *url.URL) (io.ReadCloser, error) {
 	return res.Body, nil
 }
 
-func farm(content io.Reader, rootURL *url.URL) map[*url.URL]struct{} {
+// farmWithGoquery takes a given url and retrieves the needed links associated with
+// that URL.
+func farmWithGoquery(content io.Reader, rootURL *url.URL) (map[*url.URL]struct{}, error) {
+	doc, err := goquery.NewDocumentFromReader(content)
+	if err != nil {
+		return nil, err
+	}
+
+	urlMap := make(map[*url.URL]struct{}, 0)
+
+	// Collect all href links within the document. This way we can capture
+	// external,internal and stylesheets within the page.
+	hrefs := doc.Find("[href]")
+	for i := 0; i < hrefs.Length(); i++ {
+		if item, ok := getAttr(hrefs.Get(i).Attr, "href"); ok {
+			trimmedPath := strings.TrimSpace(item.Val)
+			if !strings.Contains(trimmedPath, "javascript:void(0)") {
+				if parsedPath, err := parsePath(trimmedPath, rootURL); err == nil {
+					urlMap[parsedPath] = struct{}{}
+				}
+			}
+		}
+	}
+
+	// Collect all src links within the document. This way we can capture
+	// external,internal and stylesheets within the page.
+	srcs := doc.Find("[src]")
+	for i := 0; i < srcs.Length(); i++ {
+		if item, ok := getAttr(srcs.Get(i).Attr, "src"); ok {
+			trimmedPath := strings.TrimSpace(item.Val)
+			if !strings.Contains(trimmedPath, "javascript:void(0)") {
+				if parsedPath, err := parsePath(trimmedPath, rootURL); err == nil {
+					urlMap[parsedPath] = struct{}{}
+				}
+			}
+		}
+	}
+
+	return urlMap, nil
+}
+
+func farmWithHTML(content io.Reader, rootURL *url.URL) map[*url.URL]struct{} {
 	tokenizer := html.NewTokenizer(content)
 	urlMap := make(map[*url.URL]struct{}, 0)
 

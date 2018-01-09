@@ -1,0 +1,55 @@
+{
+	"comment": "",
+	"ignore": "test",
+	"package": [
+		{
+			"checksumSHA1": "LlvQPCCJxa/4kNQDPBM5fZrtAnU=",
+			"path": "github.com/PuerkitoBio/goquery",
+			"revision": "bc4e06eb0792d1a14661d19dd7822163c25bb6bd",
+			"revisionTime": "2017-12-06T12:16:06Z"
+		},
+		{
+			"checksumSHA1": "2rWSos1D+xqNSGkvEMOG3pntod8=",
+			"path": "github.com/andybalholm/cascadia",
+			"revision": "349dd0209470eabd9514242c688c403c0926d266",
+			"revisionTime": "2016-12-24T14:14:13Z"
+		},
+		{
+			"checksumSHA1": "yMtRtR7uotNm/tDmdthIn9RMOQ4=",
+			"path": "github.com/influx6/faux/bag",
+			"revision": "4bc81c8d3cc7259c7a3131a3404864dcaf06f638",
+			"revisionTime": "2018-01-09T22:46:13Z"
+		},
+		{
+			"checksumSHA1": "bC6GSd5TMH/TUY0i0Ua+VTpplq0=",
+			"path": "github.com/influx6/faux/flags",
+			"revision": "4bc81c8d3cc7259c7a3131a3404864dcaf06f638",
+			"revisionTime": "2018-01-09T22:46:13Z"
+		},
+		{
+			"checksumSHA1": "/PE0RGwoNeVkhlVKWxnIt0TgAA4=",
+			"path": "github.com/influx6/faux/tests",
+			"revision": "4bc81c8d3cc7259c7a3131a3404864dcaf06f638",
+			"revisionTime": "2018-01-09T22:46:13Z"
+		},
+		{
+			"checksumSHA1": "53MujtjLkEEMJD5YS4yE0t/cMFM=",
+			"path": "github.com/influx6/faux/tmplutil",
+			"revision": "4bc81c8d3cc7259c7a3131a3404864dcaf06f638",
+			"revisionTime": "2018-01-09T22:46:13Z"
+		},
+		{
+			"checksumSHA1": "2t6c6F2y4b/PEV04TOHpQxh/xLc=",
+			"path": "golang.org/x/net/html",
+			"revision": "d866cfc389cec985d6fda2859936a575a55a3ab6",
+			"revisionTime": "2017-12-11T20:45:21Z"
+		},
+		{
+			"checksumSHA1": "iWvOOLdDxvI4AVX6px6/HYBPeaQ=",
+			"path": "golang.org/x/net/html/atom",
+			"revision": "d866cfc389cec985d6fda2859936a575a55a3ab6",
+			"revisionTime": "2017-12-11T20:45:21Z"
+		}
+	],
+	"rootPath": "github.com/influx6/sitecrawler"
+}
