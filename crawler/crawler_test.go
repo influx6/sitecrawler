@@ -49,6 +49,7 @@ var (
 			<a href="/"></a>
 			<a href="/services"></a>
 			<a href="/jsoncard"></a>
+			<a href="https://twitter.com/wombat"></a>
 		</body>
 		</html>
 	`)
@@ -69,7 +70,6 @@ var (
 
 func TestPageCrawler(t *testing.T) {
 	server := httptest.NewServer(testHandler{})
-
 	target, err := url.Parse(server.URL + "/")
 	if err != nil {
 		tests.FailedWithError(err, "Should have successfully parsed url")
@@ -111,14 +111,9 @@ func TestBodyCrawler(t *testing.T) {
 	}
 	tests.Passed("Should have successfully parsed url")
 
-	bcrawler := crawler.BodyCrawler{
-		Target: target,
-	}
-
 	tests.Header("When farming links from index page")
 	{
-		bcrawler.Body = bytes.NewReader(indexPage)
-		links, err := bcrawler.Run(baseClient)
+		links, err := crawler.CrawlBody(baseClient, target, bytes.NewReader(indexPage))
 		if err != nil {
 			tests.FailedWithError(err, "Should have successfully scanned page")
 		}
@@ -134,8 +129,7 @@ func TestBodyCrawler(t *testing.T) {
 
 	tests.Header("When farming links from service page")
 	{
-		bcrawler.Body = bytes.NewReader(servicePage)
-		links, err := bcrawler.Run(baseClient)
+		links, err := crawler.CrawlBody(baseClient, target, bytes.NewReader(servicePage))
 		if err != nil {
 			tests.FailedWithError(err, "Should have successfully scanned page")
 		}
@@ -151,8 +145,7 @@ func TestBodyCrawler(t *testing.T) {
 
 	tests.Header("When farming links from contacts page")
 	{
-		bcrawler.Body = bytes.NewReader(contactPage)
-		links, err := bcrawler.Run(baseClient)
+		links, err := crawler.CrawlBody(baseClient, target, bytes.NewReader(contactPage))
 		if err != nil {
 			tests.FailedWithError(err, "Should have successfully scanned page")
 		}

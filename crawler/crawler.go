@@ -3,6 +3,7 @@ package crawler
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -11,7 +12,6 @@ import (
 
 	"sync"
 
-	"github.com/PuerkitoBio/goquery"
 	"golang.org/x/net/html"
 )
 
@@ -52,9 +52,13 @@ type PageCrawler struct {
 	// launched by crawler.
 	Waiter *sync.WaitGroup
 
+	// Verbose dictates that PageCrawler print current scanning target.
+	Verbose bool
+
 	current int
 	seen    *HasSet
 	child   bool
+	report  *LinkReport
 }
 
 // Run initializes the target url crawling all pages url paths retrieved from
@@ -79,7 +83,7 @@ func (pc PageCrawler) Run(ctx context.Context, client *http.Client, reports chan
 	// if we have have an attached seen map, then check if requests
 	// has already being added to the seen map and marked as processed or
 	// in-process.
-	if pc.seen != nil && pc.seen.Has(pc.Target.String()) {
+	if pc.seen != nil && pc.seen.Has(pc.Target.Path) {
 		return
 	}
 
@@ -95,16 +99,25 @@ func (pc PageCrawler) Run(ctx context.Context, client *http.Client, reports chan
 	}
 
 	// Add target into seen map immediately.
-	seenMap.Add(pc.Target.String())
+	seenMap.Add(pc.Target.Path)
 
 	select {
 	case <-ctx.Done():
 		// We are told to stop, so quit immediately.
 		return
 	default:
+		if pc.Verbose {
+			fmt.Printf("Scanning %+q from %q.\n", pc.Target.Path, pc.Target.Host)
+		}
+
 		var report LinkReport
-		report.Path = pc.Target
-		report.Status = getURLStatus(client, pc.Target)
+
+		if pc.report == nil {
+			report.Path = pc.Target
+			report.Status = getURLStatus(client, pc.Target)
+		} else {
+			report = *pc.report
+		}
 
 		// check url status if the page is live, else skip.
 		if !report.Status.IsLive {
@@ -126,10 +139,12 @@ func (pc PageCrawler) Run(ctx context.Context, client *http.Client, reports chan
 			return
 		}
 
+		defer pathBody.Close()
+
 		// Use BodyCrawler to retrieve page's internal children links.
 		// Skip if we failed to get children.
 		// TODO: Should we update isLive status here? Does failure here warrant change?
-		report.PointsTo, err = (BodyCrawler{Target: pc.Target, Body: pathBody}).Run(client)
+		report.PointsTo, err = CrawlBody(client, pc.Target, pathBody)
 		if err != nil {
 			reports <- report
 			return
@@ -144,8 +159,10 @@ func (pc PageCrawler) Run(ctx context.Context, client *http.Client, reports chan
 				seen:     seenMap,
 				Target:   kid.Path,
 				Waiter:   pc.Waiter,
+				Verbose:  pc.Verbose,
 				MaxDepth: pc.MaxDepth,
 				current:  pc.current + 1,
+				report:   &kid,
 			}).Run(ctx, client, reports)
 		}
 
@@ -154,29 +171,17 @@ func (pc PageCrawler) Run(ctx context.Context, client *http.Client, reports chan
 	}
 }
 
-// BodyCrawler attempts to retrieve a provided target url scanning it's associated
-// body and retrieving all routes within path.
-type BodyCrawler struct {
-	Target *url.URL
-	Body   io.Reader
-}
-
-// Run starts the internal logic of the body crawler to retrieve all
+// CrawlBody starts the internal logic of the body crawler to retrieve all
 // internal routes of the target page. It takes into account all paths
 // that are relative to the target's root.
 // The crawler is strict in that it will only crawl path in the same host
 // as the root. So paths like web.monzo.com is not within root of monzo.com,
 // and will not be crawled.
-func (bc BodyCrawler) Run(client *http.Client) ([]LinkReport, error) {
-	links, err := farm(bc.Body, bc.Target)
-	if err != nil {
-		return nil, err
-	}
-
+func CrawlBody(client *http.Client, target *url.URL, body io.Reader) ([]LinkReport, error) {
 	var kids []LinkReport
 
-	for link := range links {
-		if link.Host != bc.Target.Host {
+	for link := range farm(body, target) {
+		if link.Host != target.Host {
 			continue
 		}
 
@@ -190,18 +195,19 @@ func (bc BodyCrawler) Run(client *http.Client) ([]LinkReport, error) {
 }
 
 func getURLStatus(client *http.Client, target *url.URL) Status {
+	now := time.Now()
 	res, err := client.Head(target.String())
 	if err != nil {
 		return Status{
 			Reason:     err,
-			At:         time.Now(),
+			At:         now,
 			LastStatus: http.StatusInternalServerError,
 		}
 	}
 
 	if res.StatusCode < 200 || res.StatusCode > 299 {
 		return Status{
-			At:         time.Now(),
+			At:         now,
 			LastStatus: res.StatusCode,
 			Reason:     ErrPageFailed,
 		}
@@ -210,7 +216,7 @@ func getURLStatus(client *http.Client, target *url.URL) Status {
 	if !strings.Contains(res.Header.Get("Content-Type"), "text/html") &&
 		!strings.Contains(res.Header.Get("Content-Type"), "text/xhtml") {
 		return Status{
-			At:         time.Now(),
+			At:         now,
 			IsLive:     true,
 			LastStatus: res.StatusCode,
 			Reason:     ErrNonHTMLURL,
@@ -220,7 +226,7 @@ func getURLStatus(client *http.Client, target *url.URL) Status {
 	return Status{
 		LastStatus:  res.StatusCode,
 		IsLive:      true,
-		At:          time.Now(),
+		At:          now,
 		IsCrawlable: true,
 	}
 }
@@ -245,45 +251,58 @@ func exploreURL(client *http.Client, target *url.URL) (io.ReadCloser, error) {
 	return res.Body, nil
 }
 
-// farm takes a given url and retrieves the needed links associated with
-// that URL.
-func farm(content io.Reader, rootURL *url.URL) (map[*url.URL]struct{}, error) {
-	doc, err := goquery.NewDocumentFromReader(content)
-	if err != nil {
-		return nil, err
-	}
-
+func farm(content io.Reader, rootURL *url.URL) map[*url.URL]struct{} {
+	tokenizer := html.NewTokenizer(content)
 	urlMap := make(map[*url.URL]struct{}, 0)
 
-	// Collect all href links within the document. This way we can capture
-	// external,internal and stylesheets within the page.
-	hrefs := doc.Find("[href]")
-	for i := 0; i < hrefs.Length(); i++ {
-		if item, ok := getAttr(hrefs.Get(i).Attr, "href"); ok {
-			trimmedPath := strings.TrimSpace(item.Val)
-			if !strings.Contains(trimmedPath, "javascript:void(0)") {
-				if parsedPath, err := parsePath(trimmedPath, rootURL); err == nil {
-					urlMap[parsedPath] = struct{}{}
+	for {
+		switch tokenizer.Next() {
+		case html.ErrorToken:
+			return urlMap
+		case html.CommentToken:
+			continue
+		case html.SelfClosingTagToken, html.StartTagToken:
+			token := tokenizer.Token()
+
+			// if we dont have any attribute then skip.
+			if len(token.Attr) == 0 {
+				continue
+			}
+
+			for _, attr := range token.Attr {
+				switch strings.ToLower(attr.Key) {
+				case "href":
+					if strings.Contains(attr.Val, "javascript:void(0)") {
+						continue
+					}
+
+					if parsedPath, err := parsePath(attr.Val, rootURL); err == nil {
+						urlMap[parsedPath] = struct{}{}
+					}
+				case "src":
+					if strings.Contains(attr.Val, "javascript:void(0)") {
+						continue
+					}
+
+					if parsedPath, err := parsePath(attr.Val, rootURL); err == nil {
+						urlMap[parsedPath] = struct{}{}
+					}
+				case "srcset":
+					for _, item := range strings.Split(attr.Val, ",") {
+						if strings.Contains(item, "javascript:void(0)") {
+							continue
+						}
+
+						if parsedPath, err := parsePath(item, rootURL); err == nil {
+							urlMap[parsedPath] = struct{}{}
+						}
+					}
 				}
 			}
 		}
 	}
 
-	// Collect all src links within the document. This way we can capture
-	// external,internal and stylesheets within the page.
-	srcs := doc.Find("[src]")
-	for i := 0; i < srcs.Length(); i++ {
-		if item, ok := getAttr(srcs.Get(i).Attr, "src"); ok {
-			trimmedPath := strings.TrimSpace(item.Val)
-			if !strings.Contains(trimmedPath, "javascript:void(0)") {
-				if parsedPath, err := parsePath(trimmedPath, rootURL); err == nil {
-					urlMap[parsedPath] = struct{}{}
-				}
-			}
-		}
-	}
-
-	return urlMap, nil
+	return urlMap
 }
 
 // getAttr returns the giving attribute for a specific name type if found.
