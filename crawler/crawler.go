@@ -51,9 +51,6 @@ type PageCrawler struct {
 	// Verbose dictates that PageCrawler print current scanning target.
 	Verbose bool
 
-	// Waiter defines user provided waitgroup for listening for done call.
-	Waiter *sync.WaitGroup
-
 	current int
 	seen    *HasSet
 	child   bool
@@ -65,17 +62,21 @@ type PageCrawler struct {
 // the target's body content. It crawls deeply into all pages based on giving depth
 // desired.
 func (pc PageCrawler) Run(ctx context.Context, client *http.Client, pool WorkerPool, reports chan<- LinkReport) {
-	defer pc.Waiter.Done()
+	if pc.waiter == nil {
+		pc.waiter = new(sync.WaitGroup)
+	}
 
 	if pc.seen == nil {
 		pc.seen = NewHasSet()
 	}
 
+	pc.waiter.Add(1)
+	defer pc.waiter.Done()
+
 	// if we are the root, launch a routine to wait on the wait group, before closing the report channel.
 	if !pc.child {
-		pc.Waiter.Add(1)
 		go func() {
-			pc.Waiter.Wait()
+			pc.waiter.Wait()
 			close(reports)
 		}()
 	}
@@ -153,19 +154,22 @@ func (pc PageCrawler) Run(ctx context.Context, client *http.Client, pool WorkerP
 				continue
 			}
 
-			pc.Waiter.Add(1)
+			pc.waiter.Add(1)
 			kidCrawler := PageCrawler{
 				child:    true,
 				seen:     pc.seen,
 				Target:   kid.Path,
-				Waiter:   pc.Waiter,
+				waiter:   pc.waiter,
 				Verbose:  pc.Verbose,
 				MaxDepth: pc.MaxDepth,
 				current:  pc.current + 1,
 				report:   &kid,
 			}
 
-			pool.Add(func() { kidCrawler.Run(ctx, client, pool, reports) })
+			// Attempt to secure worker service, if failed, drop request counter.
+			if err := pool.Add(func() { kidCrawler.Run(ctx, client, pool, reports) }); err != nil {
+				pc.waiter.Done()
+			}
 		}
 
 		// Deliver target's report.

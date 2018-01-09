@@ -11,8 +11,6 @@ import (
 
 	"os"
 
-	"sync"
-
 	"github.com/influx6/faux/flags"
 	"github.com/influx6/faux/tmplutil"
 	"github.com/influx6/sitecrawler/crawler"
@@ -67,8 +65,8 @@ func main() {
 				Desc:    "Sets timeout for http.Client to be used",
 			},
 			&flags.IntFlag{
+				Default: 300,
 				Name:    "workers",
-				Default: 3000,
 				Desc:    "Sets the total workers allowed by goroutine worker pool",
 			},
 		},
@@ -97,12 +95,9 @@ func main() {
 			pool := crawler.NewWorkerPool(300, ctx)
 			defer pool.Stop()
 
-			waiter := new(sync.WaitGroup)
-
 			var pages crawler.PageCrawler
 			pages.Target = target
 			pages.MaxDepth = depth
-			pages.Waiter = waiter
 			pages.Verbose = verbose
 
 			reports := make(chan crawler.LinkReport)
@@ -112,8 +107,6 @@ func main() {
 			for report := range reports {
 				records = append(records, report)
 			}
-
-			waiter.Wait()
 
 			if err := sitemapTemplate.Execute(os.Stdout, records); err != nil {
 				return fmt.Errorf("parseError:  %+s", err)

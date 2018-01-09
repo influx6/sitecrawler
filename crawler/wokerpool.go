@@ -2,8 +2,14 @@ package crawler
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"sync/atomic"
+)
+
+// errors ...
+var (
+	ErrNoMoreService = errors.New("no more service")
 )
 
 // WorkerPool exposes a interface which provides the definition for a pool of
@@ -11,7 +17,7 @@ import (
 type WorkerPool interface {
 	Stop()
 	WaitOnStop()
-	Add(func())
+	Add(func()) error
 }
 
 func NewWorkerPool(max int, ctx context.Context) WorkerPool {
@@ -51,7 +57,7 @@ func (w *workerPool) Stop() {
 	w.wg.Wait()
 }
 
-func (w *workerPool) Add(fn func()) {
+func (w *workerPool) Add(fn func()) error {
 	total := int(atomic.LoadInt64(&w.totalWorkers))
 	active := int(atomic.LoadInt64(&w.activeWorkers))
 
@@ -64,11 +70,11 @@ func (w *workerPool) Add(fn func()) {
 		if active < total {
 			select {
 			case <-done:
-				return
+				return ErrNoMoreService
 			case <-w.close:
-				return
+				return ErrNoMoreService
 			case w.work <- fn:
-				return
+				return nil
 			}
 		}
 
@@ -78,11 +84,11 @@ func (w *workerPool) Add(fn func()) {
 
 	select {
 	case <-done:
-		return
+		return ErrNoMoreService
 	case <-w.close:
-		return
+		return ErrNoMoreService
 	case w.work <- fn:
-		return
+		return nil
 	}
 }
 
