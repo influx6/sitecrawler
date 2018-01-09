@@ -19,6 +19,27 @@ Sitecrawler is a sample project showcasing a simple web crawler which generates 
 > sitecrawler crawl https://monzo.com
 ```
 
+- Run `sitecrawler crawl [target_url]` to crawl target website for a given depth. 
+
+
+```bash
+> sitecrawler -crawl.depth=4 crawl https://monzo.com
+```
+
+- Run `sitecrawler crawl [target_url]` to crawl target website within duration deadline. 
+
+
+```bash
+> sitecrawler -timeout=1m crawl https://monzo.com
+```
+
+- Run `sitecrawler crawl [target_url]` to crawl target website with more workers. 
+
+
+```bash
+> sitecrawler -crawl.workers=8000 crawl https://monzo.com
+```
+
 - Run `sitecrawler` to see CLI options
 
 ```bash
