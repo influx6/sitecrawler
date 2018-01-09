@@ -48,27 +48,32 @@ type PageCrawler struct {
 	// Target is the parsed target url to be crawled.
 	Target *url.URL
 
-	// Waiter is the waitgroup supplied by user to ensure end of all goroutines
-	// launched by crawler.
-	Waiter *sync.WaitGroup
-
 	// Verbose dictates that PageCrawler print current scanning target.
 	Verbose bool
+
+	// Waiter defines user provided waitgroup for listening for done call.
+	Waiter *sync.WaitGroup
 
 	current int
 	seen    *HasSet
 	child   bool
 	report  *LinkReport
+	waiter  *sync.WaitGroup
 }
 
 // Run initializes the target url crawling all pages url paths retrieved from
 // the target's body content. It crawls deeply into all pages based on giving depth
 // desired.
-func (pc PageCrawler) Run(ctx context.Context, client *http.Client, reports chan<- LinkReport) {
+func (pc PageCrawler) Run(ctx context.Context, client *http.Client, pool WorkerPool, reports chan<- LinkReport) {
 	defer pc.Waiter.Done()
+
+	if pc.seen == nil {
+		pc.seen = NewHasSet()
+	}
 
 	// if we are the root, launch a routine to wait on the wait group, before closing the report channel.
 	if !pc.child {
+		pc.Waiter.Add(1)
 		go func() {
 			pc.Waiter.Wait()
 			close(reports)
@@ -83,7 +88,7 @@ func (pc PageCrawler) Run(ctx context.Context, client *http.Client, reports chan
 	// if we have have an attached seen map, then check if requests
 	// has already being added to the seen map and marked as processed or
 	// in-process.
-	if pc.seen != nil && pc.seen.Has(pc.Target.Path) {
+	if pc.seen.Has(pc.Target.Path) {
 		return
 	}
 
@@ -92,18 +97,11 @@ func (pc PageCrawler) Run(ctx context.Context, client *http.Client, reports chan
 		return
 	}
 
-	// Get Has Map if available else create new one.
-	seenMap := pc.seen
-	if seenMap == nil {
-		seenMap = NewHasSet()
-	}
-
 	// Add target into seen map immediately.
-	seenMap.Add(pc.Target.Path)
+	pc.seen.Add(pc.Target.Path)
 
 	select {
 	case <-ctx.Done():
-		// We are told to stop, so quit immediately.
 		return
 	default:
 		if pc.Verbose {
@@ -111,7 +109,6 @@ func (pc PageCrawler) Run(ctx context.Context, client *http.Client, reports chan
 		}
 
 		var report LinkReport
-
 		if pc.report == nil {
 			report.Path = pc.Target
 			report.Status = getURLStatus(client, pc.Target)
@@ -152,18 +149,23 @@ func (pc PageCrawler) Run(ctx context.Context, client *http.Client, reports chan
 
 		// Issue new PageCrawlers for target's kids and update waitgroup worker count.
 		for _, kid := range report.PointsTo {
-			pc.Waiter.Add(1)
+			if !kid.Status.IsCrawlable {
+				continue
+			}
 
-			go (PageCrawler{
+			pc.Waiter.Add(1)
+			kidCrawler := PageCrawler{
 				child:    true,
-				seen:     seenMap,
+				seen:     pc.seen,
 				Target:   kid.Path,
 				Waiter:   pc.Waiter,
 				Verbose:  pc.Verbose,
 				MaxDepth: pc.MaxDepth,
 				current:  pc.current + 1,
 				report:   &kid,
-			}).Run(ctx, client, reports)
+			}
+
+			pool.Add(func() { kidCrawler.Run(ctx, client, pool, reports) })
 		}
 
 		// Deliver target's report.

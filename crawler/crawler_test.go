@@ -6,10 +6,9 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync"
 	"testing"
 	"time"
-
-	"sync"
 
 	"context"
 
@@ -76,8 +75,11 @@ func TestPageCrawler(t *testing.T) {
 	}
 	tests.Passed("Should have successfully parsed url")
 
+	ctx := context.Background()
+	pool := crawler.NewWorkerPool(300, ctx)
+	defer pool.Stop()
+
 	waiter := new(sync.WaitGroup)
-	waiter.Add(1)
 
 	var pages crawler.PageCrawler
 	pages.Target = target
@@ -85,23 +87,23 @@ func TestPageCrawler(t *testing.T) {
 	pages.Waiter = waiter
 
 	reports := make(chan crawler.LinkReport)
-
-	go pages.Run(context.Background(), baseClient, reports)
+	pool.Add(func() {
+		pages.Run(ctx, baseClient, pool, reports)
+	})
 
 	var counter int
 	for range reports {
 		counter++
 	}
 
-	if counter != 4 {
-		tests.Info("Expected Links: %d", 4)
+	if counter != 3 {
+		tests.Info("Expected Links: %d", 3)
 		tests.Info("Received Links: %d", counter)
-		tests.Failed("Should have successfully retrieved 4 links from server")
+		tests.Failed("Should have successfully retrieved 3 links from server")
 	}
-	tests.Passed("Should have successfully retrieved 4 links from server")
+	tests.Passed("Should have successfully retrieved 3 links from server")
 
 	waiter.Wait()
-	tests.Passed("Should have successfully stopped all farmers")
 }
 
 func TestBodyCrawler(t *testing.T) {

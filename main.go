@@ -5,12 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
-	"sync"
 
 	"net/http"
 	"time"
 
 	"os"
+
+	"sync"
 
 	"github.com/influx6/faux/flags"
 	"github.com/influx6/faux/tmplutil"
@@ -65,6 +66,11 @@ func main() {
 				Default: time.Second * 5,
 				Desc:    "Sets timeout for http.Client to be used",
 			},
+			&flags.IntFlag{
+				Name:    "workers",
+				Default: 1000,
+				Desc:    "Sets the total workers allowed by goroutine worker pool",
+			},
 		},
 		Action: func(ctx flags.Context) error {
 			if len(ctx.Args()) == 0 {
@@ -72,6 +78,7 @@ func main() {
 			}
 
 			start := time.Now()
+			depth, _ := ctx.GetInt("depth")
 			timeout, _ := ctx.GetDuration("timeout")
 			verbose, _ := ctx.GetBool("verbose")
 
@@ -83,18 +90,23 @@ func main() {
 				return fmt.Errorf("url error: %+s for %+q", err, targetURL)
 			}
 
+			if target.Host == "" {
+				return fmt.Errorf("provided url has no host path")
+			}
+
+			pool := crawler.NewWorkerPool(300, ctx)
+			defer pool.Stop()
+
 			waiter := new(sync.WaitGroup)
-			waiter.Add(1)
 
 			var pages crawler.PageCrawler
 			pages.Target = target
-			pages.MaxDepth = -1
+			pages.MaxDepth = depth
 			pages.Waiter = waiter
 			pages.Verbose = verbose
 
 			reports := make(chan crawler.LinkReport)
-
-			go pages.Run(context.Background(), client, reports)
+			pool.Add(func() { pages.Run(context.Background(), client, pool, reports) })
 
 			var records []crawler.LinkReport
 			for report := range reports {
