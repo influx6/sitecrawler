@@ -68,7 +68,7 @@ func main() {
 			},
 			&flags.IntFlag{
 				Name:    "workers",
-				Default: 1000,
+				Default: 3000,
 				Desc:    "Sets the total workers allowed by goroutine worker pool",
 			},
 		},
