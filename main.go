@@ -112,6 +112,10 @@ func main() {
 			for report := range reports {
 				buf.Reset()
 
+				if pages.Verbose {
+					fmt.Printf("Received new page report: %q from %q\n", report.Path.Path, report.Path.Host)
+				}
+
 				if err := urlTemplate.Execute(&buf, report); err != nil {
 					return fmt.Errorf("parseError:  %+s", err)
 				}
