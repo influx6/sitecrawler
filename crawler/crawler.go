@@ -80,6 +80,7 @@ func (pc PageCrawler) Run(ctx context.Context, client *http.Client, pool WorkerP
 	}
 
 	defer pc.waiter.Done()
+
 	if pc.Verbose {
 		defer fmt.Printf("Done scanning %+q from %q.\n", pc.Target.Path, pc.Target.Host)
 	}
