@@ -190,12 +190,7 @@ func (pc PageCrawler) Run(ctx context.Context, client *http.Client, pool WorkerP
 func CrawlBody(client *http.Client, target *url.URL, body io.Reader) ([]LinkReport, error) {
 	var kids []LinkReport
 
-	links, err := farmWithGoquery(body, target)
-	if err != nil {
-		return nil, err
-	}
-
-	//links := farmWithHTML(body, target)
+	links := farmWithHTML(body, target)
 	for link := range links {
 		if link.Host != target.Host {
 			continue
