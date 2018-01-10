@@ -184,16 +184,16 @@ func (pc PageCrawler) Run(ctx context.Context, client *http.Client, pool WorkerP
 
 			// Attempt to secure worker service, if failed, drop request counter.
 			// Fix issue with kid report leaking into future goroutines.
-			go func(kid LinkReport) {
+			go func(k LinkReport) {
 				kidCrawler := PageCrawler{
 					child:    true,
+					report:   &k,
+					Target:   k.Path,
 					seen:     pc.seen,
-					Target:   kid.Path,
 					waiter:   pc.waiter,
 					Verbose:  pc.Verbose,
 					MaxDepth: pc.MaxDepth,
 					current:  nextDepth,
-					report:   &kid,
 				}
 
 				if err := pool.Add(func() { kidCrawler.Run(ctx, client, pool, reports) }); err != nil {
