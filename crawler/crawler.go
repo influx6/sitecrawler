@@ -171,9 +171,11 @@ func (pc PageCrawler) Run(ctx context.Context, client *http.Client, pool WorkerP
 			}
 
 			// Attempt to secure worker service, if failed, drop request counter.
-			if err := pool.Add(func() { kidCrawler.Run(ctx, client, pool, reports) }); err != nil {
-				pc.waiter.Done()
-			}
+			go func() {
+				if err := pool.Add(func() { kidCrawler.Run(ctx, client, pool, reports) }); err != nil {
+					pc.waiter.Done()
+				}
+			}()
 		}
 	}
 }
