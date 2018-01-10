@@ -71,15 +71,17 @@ func (pc PageCrawler) Run(ctx context.Context, client *http.Client, pool WorkerP
 		pc.seen = NewHasSet()
 	}
 
-	pc.waiter.Add(1)
-	defer pc.waiter.Done()
-
-	// if we are the root, launch a routine to wait on the wait group, before closing the report channel.
 	if !pc.child {
+		pc.waiter.Add(1)
 		go func() {
 			pc.waiter.Wait()
 			close(reports)
 		}()
+	}
+
+	defer pc.waiter.Done()
+	if pc.Verbose {
+		defer fmt.Printf("Done scanning %+q from %q.\n", pc.Target.Path, pc.Target.Host)
 	}
 
 	// if MaxDepth was left unset, set it to infinity(-1).
@@ -162,6 +164,7 @@ func (pc PageCrawler) Run(ctx context.Context, client *http.Client, pool WorkerP
 				continue
 			}
 
+			pc.waiter.Add(1)
 			kidCrawler := PageCrawler{
 				child:    true,
 				seen:     pc.seen,
