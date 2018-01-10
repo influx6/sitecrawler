@@ -149,6 +149,9 @@ func (pc PageCrawler) Run(ctx context.Context, client *http.Client, pool WorkerP
 			return
 		}
 
+		// Deliver target's report.
+		reports <- report
+
 		// Issue new PageCrawlers for target's kids and update waitgroup worker count.
 		for _, kid := range report.PointsTo {
 			if !kid.Status.IsCrawlable {
@@ -172,9 +175,6 @@ func (pc PageCrawler) Run(ctx context.Context, client *http.Client, pool WorkerP
 				pc.waiter.Done()
 			}
 		}
-
-		// Deliver target's report.
-		reports <- report
 	}
 }
 
