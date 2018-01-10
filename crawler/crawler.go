@@ -164,7 +164,8 @@ func (pc PageCrawler) Run(ctx context.Context, client *http.Client, pool WorkerP
 
 		// Issue new PageCrawlers for target's kids and update waitgroup worker count.
 		for _, kid := range report.PointsTo {
-			if strings.TrimSuffix(kid.Path.Path, "/") == "" {
+			kidPath := strings.TrimSuffix(kid.Path.Path, "/")
+			if kidPath == "" {
 				continue
 			}
 
@@ -172,7 +173,7 @@ func (pc PageCrawler) Run(ctx context.Context, client *http.Client, pool WorkerP
 				continue
 			}
 
-			if pc.seen.Has(strings.TrimSuffix(kid.Path.Path, "/")) {
+			if pc.seen.Has(kidPath) {
 				continue
 			}
 
