@@ -119,7 +119,7 @@ func main() {
 				records = append(records, buf.String())
 			}
 
-			fmt.Fprint(os.Stdout, sitemapTemplate, strings.Join(records, ""))
+			fmt.Fprintf(os.Stdout, sitemapTemplate, strings.Join(records, ""))
 
 			if timed, _ := ctx.GetBool("timed"); timed {
 				fmt.Fprintf(os.Stderr, "\nFinished: %+s.\n", time.Now().Sub(start))
