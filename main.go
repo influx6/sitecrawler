@@ -11,14 +11,16 @@ import (
 
 	"os"
 
+	"bytes"
+	"strings"
+
 	"github.com/influx6/faux/flags"
 	"github.com/influx6/faux/tmplutil"
 	"github.com/influx6/sitecrawler/crawler"
 )
 
 var (
-	sitemapTemplate = tmplutil.MustFrom("sitecrawler", `<?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">{{ range . }}
+	urlTemplate = tmplutil.MustFrom("url-template", `
 	<url>
 		<loc>{{.Path.String }}</loc>
 		<laststatus>{{.Status.LastStatus}}</laststatus>
@@ -33,8 +35,9 @@ var (
 			<link>{{.Path.String }}</link>
 		{{end}}</connects>{{end}}
 	</url>
-{{ end }}</urlset>
 `)
+
+	sitemapTemplate = `<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">%+s</urlset>`
 )
 
 func main() {
@@ -103,14 +106,20 @@ func main() {
 			reports := make(chan crawler.LinkReport)
 			pool.Add(func() { pages.Run(context.Background(), client, pool, reports) })
 
-			var records []crawler.LinkReport
+			var buf bytes.Buffer
+
+			var records []string
 			for report := range reports {
-				records = append(records, report)
+				buf.Reset()
+
+				if err := urlTemplate.Execute(&buf, report); err != nil {
+					return fmt.Errorf("parseError:  %+s", err)
+				}
+
+				records = append(records, buf.String())
 			}
 
-			if err := sitemapTemplate.Execute(os.Stdout, records); err != nil {
-				return fmt.Errorf("parseError:  %+s", err)
-			}
+			fmt.Fprint(os.Stdout, sitemapTemplate, strings.Join(records, ""))
 
 			if timed, _ := ctx.GetBool("timed"); timed {
 				fmt.Fprintf(os.Stderr, "\nFinished: %+s.\n", time.Now().Sub(start))
