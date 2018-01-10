@@ -64,7 +64,7 @@ func TestLinkFarm(t *testing.T) {
 	}
 	tests.Passed("Should have successfully parsed url path")
 
-	farmedLinks := farm(body, target)
+	farmedLinks := farmWithHTML(body, target)
 	if len(farmedLinks) != len(expectedPaths) {
 		tests.Info("Expected Length: %d", len(expectedPaths))
 		tests.Info("Received Length: %d", len(farmedLinks))
