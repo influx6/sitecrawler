@@ -124,6 +124,9 @@ func (pc PageCrawler) Run(ctx context.Context, client *http.Client, pool WorkerP
 			report.Status = getURLStatus(client, pc.Target)
 		} else {
 			report = *pc.report
+			if pc.Verbose {
+				fmt.Printf("Scanning %+q from source %+q.\n", pc.Target.Path, report.Path.Path)
+			}
 		}
 
 		// check url status if the page is live, else skip.
