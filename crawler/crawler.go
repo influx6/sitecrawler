@@ -158,7 +158,10 @@ func (pc PageCrawler) Run(ctx context.Context, client *http.Client, pool WorkerP
 				continue
 			}
 
-			pc.waiter.Add(1)
+			if pc.seen.Has(kid.Path.Path) {
+				continue
+			}
+
 			kidCrawler := PageCrawler{
 				child:    true,
 				seen:     pc.seen,
@@ -171,11 +174,9 @@ func (pc PageCrawler) Run(ctx context.Context, client *http.Client, pool WorkerP
 			}
 
 			// Attempt to secure worker service, if failed, drop request counter.
-			go func() {
-				if err := pool.Add(func() { kidCrawler.Run(ctx, client, pool, reports) }); err != nil {
-					pc.waiter.Done()
-				}
-			}()
+			if err := pool.Add(func() { kidCrawler.Run(ctx, client, pool, reports) }); err != nil {
+				pc.waiter.Done()
+			}
 		}
 	}
 }
@@ -189,12 +190,12 @@ func (pc PageCrawler) Run(ctx context.Context, client *http.Client, pool WorkerP
 func CrawlBody(client *http.Client, target *url.URL, body io.Reader) ([]LinkReport, error) {
 	var kids []LinkReport
 
-	//links, err := farmWithGoquery(body, target)
-	//if err != nil {
-	//	return nil, err
-	//}
+	links, err := farmWithGoquery(body, target)
+	if err != nil {
+		return nil, err
+	}
 
-	links := farmWithHTML(body, target)
+	//links := farmWithHTML(body, target)
 	for link := range links {
 		if link.Host != target.Host {
 			continue

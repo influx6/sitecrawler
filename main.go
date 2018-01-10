@@ -64,7 +64,7 @@ func main() {
 			},
 			&flags.DurationFlag{
 				Name:    "timeout",
-				Default: time.Second * 5,
+				Default: time.Second * 3,
 				Desc:    "Sets timeout for http.Client to be used",
 			},
 			&flags.IntFlag{
