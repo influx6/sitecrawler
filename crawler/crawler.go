@@ -90,10 +90,15 @@ func (pc PageCrawler) Run(ctx context.Context, client *http.Client, pool WorkerP
 		pc.MaxDepth = -1
 	}
 
+	trimmed := strings.TrimSuffix(pc.Target.Path, "/")
+	if trimmed == "" {
+		trimmed = "/"
+	}
+
 	// if we have have an attached seen map, then check if requests
 	// has already being added to the seen map and marked as processed or
 	// in-process.
-	if pc.seen.Has(pc.Target.Path) {
+	if pc.seen.Has(trimmed) {
 		return
 	}
 
@@ -103,7 +108,7 @@ func (pc PageCrawler) Run(ctx context.Context, client *http.Client, pool WorkerP
 	}
 
 	// Add target into seen map immediately.
-	pc.seen.Add(pc.Target.Path)
+	pc.seen.Add(trimmed)
 
 	select {
 	case <-ctx.Done():
@@ -159,11 +164,15 @@ func (pc PageCrawler) Run(ctx context.Context, client *http.Client, pool WorkerP
 
 		// Issue new PageCrawlers for target's kids and update waitgroup worker count.
 		for _, kid := range report.PointsTo {
+			if strings.TrimSuffix(kid.Path.Path, "/") == "" {
+				continue
+			}
+
 			if !kid.Status.IsCrawlable {
 				continue
 			}
 
-			if pc.seen.Has(kid.Path.Path) {
+			if pc.seen.Has(strings.TrimSuffix(kid.Path.Path, "/")) {
 				continue
 			}
 
