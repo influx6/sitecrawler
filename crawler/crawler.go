@@ -154,6 +154,8 @@ func (pc PageCrawler) Run(ctx context.Context, client *http.Client, pool WorkerP
 		// Deliver target's report.
 		reports <- report
 
+		nextDepth := pc.current + 1
+
 		// Issue new PageCrawlers for target's kids and update waitgroup worker count.
 		for _, kid := range report.PointsTo {
 			if !kid.Status.IsCrawlable {
@@ -165,23 +167,25 @@ func (pc PageCrawler) Run(ctx context.Context, client *http.Client, pool WorkerP
 			}
 
 			pc.waiter.Add(1)
-			kidCrawler := PageCrawler{
-				child:    true,
-				seen:     pc.seen,
-				Target:   kid.Path,
-				waiter:   pc.waiter,
-				Verbose:  pc.Verbose,
-				MaxDepth: pc.MaxDepth,
-				current:  pc.current + 1,
-				report:   &kid,
-			}
 
 			// Attempt to secure worker service, if failed, drop request counter.
-			go func(c *PageCrawler) {
-				if err := pool.Add(func() { c.Run(ctx, client, pool, reports) }); err != nil {
+			// Fix issue with kid report leaking into future goroutines.
+			go func(kid LinkReport) {
+				kidCrawler := PageCrawler{
+					child:    true,
+					seen:     pc.seen,
+					Target:   kid.Path,
+					waiter:   pc.waiter,
+					Verbose:  pc.Verbose,
+					MaxDepth: pc.MaxDepth,
+					current:  nextDepth,
+					report:   &kid,
+				}
+
+				if err := pool.Add(func() { kidCrawler.Run(ctx, client, pool, reports) }); err != nil {
 					pc.waiter.Done()
 				}
-			}(&kidCrawler)
+			}(kid)
 		}
 	}
 }
